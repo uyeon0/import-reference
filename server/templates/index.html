@@ -320,7 +320,11 @@ function progress(wrap) {
     step(label) { cur = el("div"); cur.append(el("span", "spin", SPIN[0]), label); box.appendChild(cur); },
     done(label, detail) {
       if (!cur) return;
-      cur.replaceChildren(el("span", "ok", "✓"), label, el("span", "detail", detail));
+      // 검색용 질문의 `코드` 는 답 본문처럼 노란 고정폭으로
+      const d = el("span", "detail");
+      String(detail).split(/(`[^`]+`)/).forEach(part =>
+        d.append(/^`[^`]+`$/.test(part) ? el("span", "code", part.slice(1, -1)) : part));
+      cur.replaceChildren(el("span", "ok", "✓"), label, d);
       cur = null;
     },
     remove() { clearInterval(timer); box.remove(); },
