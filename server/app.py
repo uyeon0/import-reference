@@ -16,6 +16,8 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024   # 요청 본문 64KB 까지 (질문 + 대화 기록이면 충분하다)
 
 # 요청 횟수 제한: IP 마다 /ask 를 분당 10번 · 하루 200번. 기록은 프로세스 메모리에 둔다 (서버 1대 기준)
+app.logger.setLevel("INFO")   # 스트림이 중간에 끊긴 것 같은 운영 정보를 남긴다
+
 limiter = Limiter(get_remote_address, app=app, storage_uri="memory://")
 
 MAX_QUESTION = 1000   # 질문 글자 수
@@ -84,9 +86,16 @@ def ask():
     # NDJSON 스트리밍: 한 줄에 JSON 하나. 진행 단계 → 출처 → 글자 조각들 → 끝
     # 스트림을 연 뒤에는 상태 코드를 바꿀 수 없어서, 틀린 키 같은 에러도 error 이벤트로 보낸다
     def generate():
+        sent = 0
         try:
             for ev in answer_events(index, question, history, api_key):
                 yield json.dumps(ev, ensure_ascii=False) + "\n"
+                sent += 1
+        except GeneratorExit:
+            # 브라우저가 연결을 끊으면(^C) 다음 yield 에서 GeneratorExit 가 난다. 이 제너레이터가 닫히면서
+            # answer_events 도 닫히고, OpenAI 스트림 요청이 함께 끊긴다. 질문 · 키는 로그에 남기지 않는다
+            app.logger.info("answer stream closed by client after %d events", sent)
+            raise
         except KeyProblem as e:
             yield json.dumps({"type": "error", "text": str(e), "key": True}, ensure_ascii=False) + "\n"
         except RagError as e:

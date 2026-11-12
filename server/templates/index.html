@@ -343,9 +343,24 @@ function traceback(wrap, name, msg) {
 $("#q").addEventListener("keydown", e => {
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("#form").requestSubmit(); }
 });
-$("#reset").addEventListener("click", () => { history = []; intro(); $("#q").focus(); });
-
-let busy = false;
+// 답을 받는 동안에는 clear() 버튼이 ^C(멈추기)로 바뀐다
+let busy = false, controller = null;
+function setBusy(on) {
+  busy = on;
+  $("#reset").textContent = on ? "^C" : "clear()";
+  $("#reset").title = on ? "답 멈추기 (Esc)" : "";
+}
+function interrupt() { if (busy && controller) controller.abort(); }
+$("#reset").addEventListener("click", () => {
+  if (busy) return interrupt();
+  history = []; intro(); $("#q").focus();
+});
+// Esc, 또는 입력창이 비어 있을 때 Ctrl+C 로 멈춘다 (글자가 있으면 Ctrl+C 는 원래대로 복사)
+document.addEventListener("keydown", e => {
+  if (!busy) return;
+  const copyKey = e.ctrlKey && e.key.toLowerCase() === "c" && !$("#q").value && !String(window.getSelection());
+  if (e.key === "Escape" || copyKey) { e.preventDefault(); interrupt(); }
+});
 $("#form").addEventListener("submit", async e => {
   e.preventDefault();
   const question = $("#q").value.trim();
@@ -367,13 +382,15 @@ $("#form").addEventListener("submit", async e => {
   wait.step("질문 다듬는 중…");
   scroll();
 
-  busy = true;
+  setBusy(true);
+  controller = new AbortController();
   let text = "", meta = null, out = null, toggle = () => {}, failed = false;
   try {
     const res = await fetch("/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-OpenAI-Key": key },
       body: JSON.stringify({ question, history: history.slice(-6) }),   // 서버도 최근 6개만 쓴다
+      signal: controller.signal,   // abort() 하면 연결을 끊는다 → 서버도 다음 글자를 보낼 때 멈춘다
     });
     if (!res.ok) {
       const d = await res.json().catch(() => ({ error: "서버 오류가 났어요." }));
@@ -424,10 +441,17 @@ $("#form").addEventListener("submit", async e => {
     }
     else if (meta) toggle = renderSources(wrap, meta.sources, text) || toggle;
     history.push({ role: "user", content: question }, { role: "assistant", content: text });
-  } catch {
-    wait.remove(); traceback(wrap, "ConnectionError", "서버와 연결이 끊겼어요.");
+  } catch (err) {
+    wait.remove();
+    if (err.name === "AbortError") {
+      // 멈춘 경우: 받은 데까지의 답과 그 답에 나온 출처는 남기고 KeyboardInterrupt 를 붙인다.
+      // 잘린 답은 다음 질문의 맥락으로 쓰이지 않게 대화 기록에 넣지 않는다
+      if (out && meta) toggle = renderSources(wrap, meta.sources, text) || toggle;
+      const k = el("div", "muted"); k.append(el("span", "err", "KeyboardInterrupt"));
+      wrap.appendChild(k);
+    } else traceback(wrap, "ConnectionError", "서버와 연결이 끊겼어요.");
   } finally {
-    busy = false; scroll(); $("#q").focus();
+    setBusy(false); controller = null; scroll(); $("#q").focus();
   }
 });
 </script>
