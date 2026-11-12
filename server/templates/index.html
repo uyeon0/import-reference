@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>import reference · 비공식 파이썬 레퍼런스 챗봇</title>
+<meta name="description" content="파이썬 언어 레퍼런스(한국어)를 근거로 답하는 비공식 RAG 챗봇. 답마다 근거로 쓴 공식 문서의 절을 링크로 붙입니다.">
+<meta name="theme-color" content="#11151c">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<!-- 링크 미리보기(OG · 트위터 카드). 이미지 주소는 절대 경로여야 해서 요청이 들어온 주소(url_root)로 만든다 -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="import reference · 비공식 파이썬 레퍼런스 챗봇">
+<meta property="og:description" content="파이썬 언어 레퍼런스(한국어)를 근거로 답하는 비공식 RAG 챗봇. 답마다 공식 문서의 절을 출처로 붙입니다.">
+<meta property="og:url" content="{{ request.url_root }}">
+<meta property="og:image" content="{{ request.url_root }}static/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  /* Jetendard v0.1.0 공식 웹폰트: JetBrains Mono Nerd Font + Pretendard 한글 (SIL OFL 1.1, server/static/fonts/OFL.txt). 600 · 800 굵기는 Bold 파일로 그린다 */
+  @font-face { font-family: 'Jetendard'; src: url('/static/fonts/Jetendard-Regular.woff2') format('woff2'); font-weight: 400 500; font-display: swap; }
+  @font-face { font-family: 'Jetendard'; src: url('/static/fonts/Jetendard-Bold.woff2') format('woff2'); font-weight: 600 900; font-display: swap; }
+  :root {
+    --bg: oklch(0.17 0.012 255); --bg2: oklch(0.21 0.014 255); --line: oklch(0.30 0.014 255);
+    --ink: oklch(0.93 0.008 90); --dim: oklch(0.66 0.012 255); --ghost: oklch(0.26 0.014 255);
+    --blue: oklch(0.74 0.11 250); --yellow: oklch(0.84 0.11 90); --red: oklch(0.72 0.11 25);
+    --mono: 'Jetendard', ui-monospace, monospace; --kr: var(--mono);   /* 터미널처럼 모든 글자를 고정폭으로 */
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  /* 합자 끄기: Jetendard 는 ==, !=, -> 를 기호 하나로 합쳐 그린다. 문법을 설명하는 앱이라 쓴 그대로 보여 준다 */
+  body { background: var(--bg); color: var(--ink); font-family: var(--kr); font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
+  /* `font:` 단축 속성은 합자 설정을 기본값으로 되돌린다 → 모든 요소에 다시 건다 */
+  *, input, textarea, button { font-variant-ligatures: none !important; font-feature-settings: "liga" 0, "calt" 0 !important; }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { color: var(--yellow); text-decoration: underline; }
+
+  .stage { position: relative; height: 100vh; overflow: hidden;
+    background: radial-gradient(ellipse at 20% -10%, oklch(0.24 0.03 250) 0%, transparent 55%), var(--bg); }
+  /* 배경 밈: 본문 폭(860px) 바깥 양옆 여백에만 깔리는 에러 메시지 */
+  .ghost { position: absolute; white-space: nowrap; pointer-events: none; font: 15px var(--mono); color: var(--ghost); }
+  .gl { right: calc(50% + 450px); }
+  .gr { left: calc(50% + 450px); }
+  .zen { position: absolute; right: -6px; top: 0; bottom: 0; writing-mode: vertical-rl; pointer-events: none;
+    font: 800 13px var(--mono); letter-spacing: .35em; color: var(--ghost); text-transform: uppercase; padding: 24px 0; white-space: nowrap; overflow: hidden; }
+
+  .shell { position: relative; max-width: 860px; height: 100vh; margin: 0 auto; display: flex; flex-direction: column; padding: 28px 20px 16px; }
+  .banner { font: 13px/1.7 var(--mono); color: var(--dim); }
+  .banner b { color: var(--ink); font-weight: 600; }
+  .title { font: 800 clamp(26px, 4.5vw, 40px)/1.1 var(--mono); letter-spacing: -.02em; margin: 18px 0 6px; }
+  .y { color: var(--yellow); } .b { color: var(--blue); }
+  .sub { color: var(--dim); font-size: 14px; padding-bottom: 20px; }
+
+  .log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 26px; padding: 28px 0; scrollbar-color: var(--line) transparent; }
+  .ps { color: var(--yellow); font-weight: 600; user-select: none; font-family: var(--mono); }
+  .q { display: flex; gap: 12px; font-size: 16px; line-height: 1.6; }
+  .q .text { white-space: pre-wrap; word-break: break-word; }
+  .out { padding-left: 40px; margin-top: 8px; font-size: 15.5px; line-height: 1.8; white-space: pre-wrap; word-break: break-word; text-wrap: pretty; }
+  .code { font: 14px var(--mono); color: var(--yellow); }
+  .cite { font: 11.5px var(--mono); color: var(--bg); background: var(--blue); padding: 1px 5px; border-radius: 3px;
+    margin-left: 3px; vertical-align: 2px; cursor: pointer; }
+  .cite:hover { background: var(--yellow); }
+  .srcs { padding-left: 40px; margin-top: 10px; display: flex; flex-direction: column; gap: 3px; font: 13px var(--mono); color: var(--dim); }
+  .srcs .more { cursor: pointer; }
+  .srcs pre { margin: 4px 0 8px 2ch; padding: 10px 12px; background: var(--bg2); border-radius: 6px; white-space: pre-wrap;
+    font: 12.5px/1.6 var(--mono); color: var(--dim); max-height: 220px; overflow: auto; }
+  .muted { padding-left: 40px; margin-top: 8px; font: 14px/1.75 var(--mono); color: var(--dim); white-space: pre-wrap; }
+  .err { color: var(--red); font-weight: 600; }
+  .caret { display: inline-block; width: 9px; height: 18px; background: var(--yellow); vertical-align: -3px; animation: blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .keybar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border-top: 1px solid var(--line); padding: 12px 0; font: 14px var(--mono); }
+  .keybar input[type=password] { flex: 1; min-width: 200px; background: var(--bg2); border: 1px solid var(--line); border-radius: 6px;
+    color: var(--ink); padding: 7px 10px; font: 14px var(--mono); }
+  .keyset { color: var(--dim); flex: 1; }
+  .prompt { display: flex; gap: 12px; align-items: flex-start; border-top: 1px solid var(--line); padding-top: 14px; }
+  .prompt textarea { flex: 1; resize: none; background: transparent; border: 0; outline: 0; color: var(--ink);
+    font: 16px/1.6 var(--kr); height: 52px; caret-color: var(--yellow); }
+  .prompt textarea::placeholder { color: var(--dim); }
+  .btn { font: 13px var(--mono); color: var(--dim); border: 1px solid var(--line); background: var(--bg2); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+  .btn:hover { color: var(--ink); border-color: var(--dim); }
+  .hint { font: 12px var(--mono); color: var(--dim); padding-left: 40px; }
+  .help { display: grid; grid-template-columns: max-content 1fr; column-gap: 24px; row-gap: 4px; padding-left: 40px; margin-top: 8px; font-size: 14px; line-height: 1.7; }
+  .help .k { color: var(--dim); font-family: var(--mono); }
+  .ex { display: flex; flex-direction: column; gap: 2px; padding-left: 40px; margin-top: 8px; font-size: 15px; }
+  .exi { display: flex; gap: 10px; padding: 3px 8px; margin-left: -8px; border-radius: 4px; cursor: pointer; color: var(--ink);
+    background: none; border: 0; font: inherit; text-align: left; }
+  .exi .m { color: var(--dim); font-family: var(--mono); }
+  .exi:hover, .exi:focus-visible { background: var(--bg2); color: var(--yellow); outline: 0; }
+  .exi:hover .m, .exi:focus-visible .m { color: var(--yellow); }
+  .keyinfo { border-top: 1px solid var(--line); padding-top: 12px; font: 13px/1.75 var(--mono); color: var(--dim); }
+  .keyinfo + .keybar { border-top: 0; padding-top: 8px; }
+  .progress { padding-left: 40px; margin-top: 8px; font: 14px/1.75 var(--mono); color: var(--dim); }
+  .progress .spin { color: var(--yellow); display: inline-block; width: 2ch; }
+  .progress .ok { color: var(--blue); display: inline-block; width: 2ch; }
+  .progress .detail { color: var(--dim); opacity: .8; margin-left: 1ch; }
+  [hidden] { display: none !important; }
+  @media (max-width: 640px) { .out, .srcs, .muted, .hint { padding-left: 0; } .ghost, .zen { display: none; } }
+</style>
+</head>
+<body>
+<div class="stage">
+  <span class="ghost gl" style="top:12%">IndentationError: expected an indented block</span>
+  <span class="ghost gr" style="top:24%">TypeError: can only concatenate str (not "int") to str</span>
+  <span class="ghost gl" style="top:40%">SyntaxError: invalid syntax. Perhaps you forgot a comma?</span>
+  <span class="ghost gr" style="top:55%">KeyError: 'answer'</span>
+  <span class="ghost gl" style="top:68%">AttributeError: 'NoneType' object has no attribute 'strip'</span>
+  <span class="ghost gr" style="top:80%">RecursionError: maximum recursion depth exceeded</span>
+  <span class="ghost gl" style="top:92%">TabError: inconsistent use of tabs and spaces</span>
+  <div class="zen">Beautiful is better than ugly · Explicit is better than implicit · Simple is better than complex · Readability counts · Errors should never pass silently</div>
+
+  <div class="shell">
+    <div class="banner">
+      <div><b>Python 3.15</b> (reference, ko) [RAG on text-embedding-3-small] <span class="y">unofficial</span></div>
+      <div>Type "help" for nothing, "import this" for the Zen, or just ask in 한국어.</div>
+    </div>
+    <div class="title"><span class="y">&gt;&gt;&gt;</span> import <span class="b">reference</span></div>
+    <div class="sub">파이썬 언어 레퍼런스(한국어)만 근거로 답합니다. 출처를 누르면 공식 문서의 그 절로 갑니다.<br>Python Software Foundation · 파이썬 공식 문서 팀과 관계없는 비공식 개인 프로젝트입니다.</div>
+
+    <div class="log" id="log"></div>
+
+    <!-- 키 입력: 키는 이 브라우저에만 두고, 질문할 때 요청 헤더로만 보낸다 -->
+    <div class="keyinfo" id="keyInfo">
+      <div># 키는 이 탭에만 저장되고 서버에 남지 않아요. 탭을 닫으면 사라져요.</div>
+      <div># 질문할 때마다 이 키로 OpenAI 요금이 나가요 · 키 발급: <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com/api-keys ↗</a></div>
+    </div>
+    <form class="keybar" id="keyForm">
+      <span class="ps">&gt;&gt;&gt;</span><span>openai.api_key =</span>
+      <input type="password" id="keyInput" placeholder="sk-..." autocomplete="off" spellcheck="false">
+      <button class="btn">set</button>
+    </form>
+    <div class="keybar" id="keySet" hidden>
+      <span class="keyset"># openai.api_key = <span id="keyMask"></span></span>
+      <button class="btn" type="button" id="keyDel">del openai.api_key</button>
+    </div>
+
+    <form class="prompt" id="form">
+      <span class="ps" style="font-size:16px;line-height:1.6">&gt;&gt;&gt;</span>
+      <textarea id="q" placeholder="질문을 입력하세요" maxlength="1000"></textarea>
+      <button class="btn" type="button" id="reset">clear()</button>
+    </form>
+    <div class="hint">Enter 실행 · Shift+Enter 줄바꿈</div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const log = $("#log");
+const NOT_FOUND = "문서에서 찾지 못했습니다.";
+let history = [];   // 서버는 대화를 기억하지 않는다. 매번 브라우저가 기록을 같이 보낸다
+
+// ── 키 ────────────────────────────────────────────────
+// sessionStorage: 탭을 닫으면 키가 사라진다
+const KEY = "openai_api_key";
+function getKey() {
+  try { return sessionStorage.getItem(KEY) || ""; } catch { return memKey; }
+}
+let memKey = "";   // 저장소를 못 쓰는 환경(사생활 보호 모드 등)에서는 메모리에만
+function setKey(k) {
+  memKey = k;
+  try { sessionStorage.setItem(KEY, k); } catch {}
+}
+function delKey() {
+  memKey = "";
+  try { sessionStorage.removeItem(KEY); } catch {}
+}
+function showKey() {
+  const k = getKey() || memKey;
+  $("#keyForm").hidden = !!k;
+  $("#keyInfo").hidden = !!k;
+  $("#keySet").hidden = !k;
+  $("#keyMask").textContent = k ? `"${k.slice(0, 3)}…${k.slice(-4)}"` : "";
+}
+$("#keyForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const k = $("#keyInput").value.trim();
+  if (!k) return;
+  setKey(k);
+  $("#keyInput").value = "";
+  showKey();
+  $("#q").focus();
+});
+$("#keyDel").addEventListener("click", () => { delKey(); showKey(); $("#keyInput").focus(); });
+showKey();
+
+// ── 화면 그리기 ────────────────────────────────────────
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+function scroll() { log.scrollTop = log.scrollHeight; }
+
+const EXAMPLES = ["is 와 == 는 어떻게 달라?", "with 문은 어떻게 동작해?", "for 문에 else 붙이면 언제 실행돼?"];
+
+// 첫 화면: help(reference) 로 범위를, reference.examples 로 눌러서 바로 물을 질문을 보여 준다
+function intro() {
+  log.innerHTML = "";
+  const box = el("div"); box.id = "intro";
+
+  const h = el("div");
+  const hq = el("div", "q"); hq.append(el("span", "ps", ">>>"), el("span", null, "help(reference)")); hq.style.fontFamily = "var(--mono)";
+  const help = el("div", "help");
+  help.append(el("span", "k", "답할 수 있는 것"), el("span", null, "연산자 · 문장(if, for, with …) · 데이터 모델 · 임포트 · 어휘 규칙"),
+              el("span", "k", "답하지 않는 것"), el("span", null, "라이브러리 사용법 (list.sort, requests …) · 설치 · 에러 디버깅"));
+  help.lastChild.style.color = "var(--dim)";
+  h.append(hq, help);
+
+  const e = el("div"); e.style.marginTop = "22px";
+  const eq = el("div", "q"); eq.append(el("span", "ps", ">>>"), el("span", null, "reference.examples")); eq.style.fontFamily = "var(--mono)";
+  const ex = el("div", "ex");
+  EXAMPLES.forEach(text => {
+    const b = el("button", "exi"); b.type = "button";
+    b.append(el("span", "m", "▸"), el("span", null, text));
+    b.onclick = () => ask(text);
+    ex.appendChild(b);
+  });
+  e.append(eq, ex);
+
+  box.append(h, e);
+  log.appendChild(box);
+}
+
+// 예시 질문 누르기: 키가 있으면 바로 질문, 없으면 질문을 입력창에 넣고 키 칸으로 커서를 옮긴다
+function ask(text) {
+  $("#q").value = text;
+  if (getKey() || memKey) $("#form").requestSubmit();
+  else $("#keyInput").focus();
+}
+intro();
+
+// 인용 번호 다시 매기기: LLM은 자료 목록 순서([4], [5] …)로 인용한다.
+// 화면에서는 답에 처음 나온 순서대로 1, 2, 3 … 으로 보여 준다 (원래 번호 → 화면 번호)
+// 같은 절에서 온 조각들(같은 url)은 같은 번호로 묶는다: [1] [2] 가 둘 다 '6.10.1. 값 비교'로 보이지 않게
+let currentSources = [];
+function citeOrder(text) {
+  const order = new Map(), byUrl = new Map();
+  for (const m of text.matchAll(/\[(\d+)\]/g)) {
+    const n = +m[1];
+    if (order.has(n)) continue;
+    const url = currentSources.find(s => s.n === n)?.url ?? `#${n}`;
+    if (!byUrl.has(url)) byUrl.set(url, byUrl.size + 1);
+    order.set(n, byUrl.get(url));
+  }
+  return order;
+}
+
+// 답 문자열 → `코드` 는 노란 고정폭, [2] 는 출처 칩
+function renderAnswer(box, text, onCite) {
+  const order = citeOrder(text);
+  box.innerHTML = "";
+  text.split(/(`[^`]+`|\[\d+\])/).forEach(part => {
+    if (/^`[^`]+`$/.test(part)) box.appendChild(el("span", "code", part.slice(1, -1)));
+    else if (/^\[\d+\]$/.test(part)) {
+      const n = +part.slice(1, -1);
+      const c = el("span", "cite", order.get(n));
+      c.onclick = () => onCite(n);
+      box.appendChild(c);
+    } else box.appendChild(document.createTextNode(part));
+  });
+}
+
+// 출처: 파이썬 주석처럼. 답에 쓰인 번호만 보여 주고, [번호]를 누르면 원문 조각을 펼친다
+function renderSources(wrap, sources, text) {
+  const order = citeOrder(text);
+  // 같은 번호(같은 절)는 한 줄만 보여 주고, 펼치면 그 절에서 온 조각을 모두 보여 준다
+  const groups = new Map();
+  sources.filter(s => order.has(s.n)).forEach(s => {
+    const d = order.get(s.n);
+    if (!groups.has(d)) groups.set(d, { ...s, text: s.text, ns: [s.n] });
+    else { const g = groups.get(d); g.text += "\n\n…\n\n" + s.text; g.ns.push(s.n); }
+  });
+  const list = [...groups.values()].sort((a, b) => order.get(a.n) - order.get(b.n));
+  if (!list.length) return null;
+  const box = el("div", "srcs");
+  const rows = {};
+  list.forEach(s => {
+    const row = el("div");
+    const more = el("span", "more", `# [${order.get(s.n)}] `);
+    const a = el("a", null, `${s.label} ↗`);
+    a.href = s.url; a.target = "_blank"; a.rel = "noopener";
+    const pre = el("pre", null, s.text); pre.hidden = true;
+    more.onclick = () => { pre.hidden = !pre.hidden; };
+    row.append(more, a, pre);
+    s.ns.forEach(n => { rows[n] = pre; });
+    box.appendChild(row);
+  });
+  wrap.appendChild(box);
+  return n => { if (rows[n]) rows[n].hidden = !rows[n].hidden; };
+}
+
+// 진행 단계 표시: 지금 단계는 돌아가는 스피너, 끝난 단계는 ✓ + 결과 한 줄
+const SPIN = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
+function progress(wrap) {
+  const box = el("div", "progress");
+  wrap.appendChild(box);
+  let cur = null, frame = 0;
+  const timer = setInterval(() => { if (cur) cur.firstChild.textContent = SPIN[frame++ % SPIN.length]; }, 80);
+  return {
+    step(label) { cur = el("div"); cur.append(el("span", "spin", SPIN[0]), label); box.appendChild(cur); },
+    done(label, detail) {
+      if (!cur) return;
+      cur.replaceChildren(el("span", "ok", "✓"), label, el("span", "detail", detail));
+      cur = null;
+    },
+    remove() { clearInterval(timer); box.remove(); },
+  };
+}
+
+// 에러 · 찾지 못함은 파이썬 Traceback 모양으로
+function traceback(wrap, name, msg) {
+  const t = el("div", "muted", 'Traceback (most recent call last):\n  File "python_ref.json", line 855, in search\n');
+  const m = el("span", null, msg); m.style.color = "var(--ink)"; m.style.fontFamily = "var(--kr)";
+  t.append(el("span", "err", name), ": ", m);
+  wrap.appendChild(t);
+}
+
+// ── 질문 ──────────────────────────────────────────────
+$("#q").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("#form").requestSubmit(); }
+});
+$("#reset").addEventListener("click", () => { history = []; intro(); $("#q").focus(); });
+
+let busy = false;
+$("#form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const question = $("#q").value.trim();
+  if (!question || busy) return;
+  $("#intro")?.remove();
+
+  const wrap = el("div");
+  const q = el("div", "q");
+  q.append(el("span", "ps", ">>>"), el("span", "text", question));
+  wrap.appendChild(q);
+  log.appendChild(wrap);
+  $("#q").value = "";
+
+  const key = getKey() || memKey;
+  if (!key) { traceback(wrap, "AuthenticationError", "OpenAI API 키를 먼저 입력해 주세요."); scroll(); $("#keyInput").focus(); return; }
+
+  // 기다리는 동안: 서버가 보내는 단계마다 스피너 줄. 답의 첫 글자가 오면 통째로 지운다
+  const wait = progress(wrap);
+  wait.step("질문 다듬는 중…");
+  scroll();
+
+  busy = true;
+  let text = "", meta = null, out = null, toggle = () => {}, failed = false;
+  try {
+    const res = await fetch("/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-OpenAI-Key": key },
+      body: JSON.stringify({ question, history: history.slice(-6) }),   // 서버도 최근 6개만 쓴다
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({ error: "서버 오류가 났어요." }));
+      wait.remove();
+      traceback(wrap, d.key ? "AuthenticationError" : "RuntimeError", d.error);
+      if (d.key) { delKey(); showKey(); }
+      return;
+    }
+    // NDJSON 을 줄 단위로 읽는다. 네트워크 조각이 줄 중간에서 끊길 수 있어 남은 부분을 buf 에 모은다
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split("\n"); buf = lines.pop();
+      for (const line of lines) {
+        if (!line) continue;
+        const ev = JSON.parse(line);
+        if (ev.type === "stage") {
+          if (ev.stage === "search") { wait.done("질문 다듬기", ev.query); wait.step("레퍼런스 찾는 중…"); }
+          else if (ev.stage === "answer") { wait.done("레퍼런스 찾기", `조각 ${meta?.sources.length ?? 0}개`); wait.step("답 쓰는 중…"); }
+          scroll();
+        }
+        else if (ev.type === "meta") { meta = ev; currentSources = ev.sources; }
+        else if (ev.type === "token") {
+          if (!out) { wait.remove(); out = el("div", "out"); wrap.appendChild(out); }
+          text += ev.text;
+          renderAnswer(out, text, n => toggle(n)); scroll();
+        } else if (ev.type === "error") {
+          wait.remove();
+          traceback(wrap, ev.key ? "AuthenticationError" : "RuntimeError", ev.text);
+          if (ev.key) { delKey(); showKey(); }
+          failed = true;
+        }
+      }
+    }
+    wait.remove();
+    if (failed) return;
+    if (text.trim() === NOT_FOUND) {
+      out?.remove();
+      traceback(wrap, "LookupError", NOT_FOUND);
+      // 찾지 못했을 때 다음에 할 일을 파이썬 주석 모양으로 알려 준다
+      const hint = el("div", "muted", "# hint: 레퍼런스에 없는 내용일 수 있어요. 라이브러리 사용법은 답하지 않아요.\n#       키워드를 바꿔 물어보세요. 예) \"비교 연산자\", \"제너레이터\"");
+      hint.style.marginTop = "6px";
+      wrap.appendChild(hint);
+    }
+    else if (meta) toggle = renderSources(wrap, meta.sources, text) || toggle;
+    history.push({ role: "user", content: question }, { role: "assistant", content: text });
+  } catch {
+    wait.remove(); traceback(wrap, "ConnectionError", "서버와 연결이 끊겼어요.");
+  } finally {
+    busy = false; scroll(); $("#q").focus();
+  }
+});
+</script>
+</body>
+</html>
