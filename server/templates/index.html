@@ -409,7 +409,8 @@ $("#form").addEventListener("submit", async e => {
     }
     wait.remove();
     if (failed) return;
-    if (text.trim() === NOT_FOUND) {
+    // 답이 '찾지 못' 문장으로 시작하면 찾지 못한 것으로 본다 (모델이 뒤에 한마디 덧붙여도)
+    if (text.trim().startsWith(NOT_FOUND)) {
       out?.remove();
       traceback(wrap, "LookupError", NOT_FOUND);
       // 찾지 못했을 때 다음에 할 일을 파이썬 주석 모양으로 알려 준다
