@@ -97,7 +97,20 @@
   .progress .ok { color: var(--blue); display: inline-block; width: 2ch; }
   .progress .detail { color: var(--dim); opacity: .8; margin-left: 1ch; }
   [hidden] { display: none !important; }
-  @media (max-width: 640px) { .out, .srcs, .muted, .hint { padding-left: 0; } .ghost, .zen { display: none; } }
+  /* 좁은 화면: 대화 영역만 따로 스크롤하면 머리말 · 입력 영역에 밀려 대화가 거의 안 보인다.
+     페이지 전체를 스크롤하고, 질문 입력줄만 아래에 붙여 둔다 */
+  @media (max-width: 640px) {
+    .out, .srcs, .muted, .hint, .help, .ex, .progress { padding-left: 0; }
+    .ghost, .zen { display: none; }
+    .stage, .shell { height: auto; min-height: 100vh; overflow: visible; }
+    .shell { padding: 20px 16px 0; }
+    .title { margin-top: 12px; }
+    .log { overflow: visible; padding: 20px 0; }
+    .help { grid-template-columns: 1fr; row-gap: 0; }
+    .help .k { margin-top: 6px; }
+    .prompt { position: sticky; bottom: 0; background: var(--bg); padding-bottom: 6px; }
+    .hint { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -192,7 +205,11 @@ function el(tag, cls, text) {
   if (text != null) e.textContent = text;
   return e;
 }
-function scroll() { log.scrollTop = log.scrollHeight; }
+// 넓은 화면은 대화 영역이, 좁은 화면은 페이지 전체가 스크롤된다
+function scroll() {
+  if (log.scrollHeight > log.clientHeight) log.scrollTop = log.scrollHeight;
+  else window.scrollTo(0, document.documentElement.scrollHeight);
+}
 
 const EXAMPLES = ["is 와 == 는 어떻게 달라?", "with 문은 어떻게 동작해?", "for 문에 else 붙이면 언제 실행돼?"];
 
